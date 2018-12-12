@@ -26,17 +26,23 @@ macro_rules! io_error {
 
 const AMOUNT: usize = 300;
 
-fn main() {
-    let files = get_stats_files("./stats").unwrap();
+fn main() -> io::Result<()> {
+    let files = list_stats_files("./stats").unwrap();
 
     let mut stats = Vec::with_capacity(files.len());
 
     for file in files {
-        stats.push(read_stats(&file).expect(&format!("Error reading stats from {:?}", &file)));
+        stats.push(Player::new(&file)?);
     }
 
     stats.sort();
-    let stats: Vec<StatsFile> = stats.drain(..).take(AMOUNT).collect();
+
+    let take = if stats.len() > AMOUNT {
+        AMOUNT
+    } else {
+        stats.len()
+    };
+    let stats = &stats[..take];
 
     /* The static numbers column commented out because it doesn't align properly
      * https://meta.wikimedia.org/wiki/Help:Sorting#Static_column
@@ -61,17 +67,17 @@ fn main() {
         println!("{}", &stat);
     }
     println!("|}}");
+
+    Ok(())
 }
 
 /// Returns a list of paths to each of the json files in the stats directory
-fn get_stats_files(dir: &str) -> io::Result<Vec<PathBuf>> {
+fn list_stats_files(dir: &str) -> io::Result<Vec<PathBuf>> {
     Ok(fs::read_dir(dir)?
        .map(|x| x.unwrap().path().to_path_buf())
        .filter(|x| {
            match x.file_name() {
-               /* json file names have exactly 41 characters,
-                * not super important that we throw away non-json names now,
-                * but no reason not to */
+               /* json stats file names have exactly 41 characters */
                Some(name) if name.len() == 41 => (),
                _ => return false,
            }
@@ -83,140 +89,8 @@ fn get_stats_files(dir: &str) -> io::Result<Vec<PathBuf>> {
        .collect())
 }
 
-
-macro_rules! stats_file {
-    (
-        $( $name:ident, $typ:ty, $default:expr );+
-    ) => {
-#[derive(Deserialize, Debug, PartialEq, Eq)]
-#[allow(non_snake_case)]
-        struct StatsFile {
-            $(
-                $name: $typ
-            ),+
-        }
-        impl StatsFile {
-            fn none_to_default(&mut self) {
-                $(
-                    if let None = self.$name {
-                        self.$name = $default;
-                    }
-                )+
-            }
-        }
-
-    };
-}
-stats_file!(playername, Option<String>, Some("Unknown name".to_string());
-            stat_playOneMinute, Option<u64>, Some(0);
-            stat_leaveGame, Option<u64>, Some(0);
-            stat_jump, Option<u64>, Some(0);
-            stat_deaths, Option<u64>, Some(0);
-            stat_damageTaken, Option<u64>, Some(0);
-            stat_damageDealt, Option<u64>, Some(0);
-            stat_mobKills, Option<u64>, Some(0);
-            stat_playerKills, Option<u64>, Some(0);
-            stat_walkOneCm, Option<u64>, Some(0);
-            stat_crouchOneCm, Option<u64>, Some(0);
-            stat_sprintOneCm, Option<u64>, Some(0);
-            stat_swimOneCm, Option<u64>, Some(0);
-            stat_fallOneCm, Option<u64>, Some(0);
-            stat_climbOneCm, Option<u64>, Some(0);
-            stat_flyOneCm, Option<u64>, Some(0);
-            stat_diveOneCm, Option<u64>, Some(0);
-            stat_minecartOneCm, Option<u64>, Some(0);
-            stat_boatOneCm, Option<u64>, Some(0);
-            stat_pigOneCm, Option<u64>, Some(0);
-            stat_horseOneCm, Option<u64>, Some(0);
-            stat_aviateOneCm, Option<u64>, Some(0);
-            distanceMeter, Option<u64>, Some(0);
-            stat_cakeSlicesEaten, Option<u64>, Some(0);
-            advancements_count, Option<u64>, Some(0));
-
-impl Ord for StatsFile {
-    fn cmp(&self, other: &StatsFile) -> Ordering {
-        self.stat_playOneMinute.cmp(&other.stat_playOneMinute).reverse()
-    }
-}
-impl PartialOrd for StatsFile {
-    fn partial_cmp(&self, other: &StatsFile) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-impl fmt::Display for StatsFile {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f,
-               "| [[{playername}]] || {playtime} || {leavegame} || {jump} || {deaths} || {taken} || {dealt} || {mobkills} || {playerkills} || {distance} || {cakeslices} || {advancements}/55",
-               playername=self.playername.clone().unwrap(),
-               playtime=self.stat_playOneMinute.unwrap() / (20 * 60 * 60),
-               leavegame=self.stat_leaveGame.unwrap(),
-               jump=self.stat_jump.unwrap(),
-               deaths=self.stat_deaths.unwrap(),
-               taken=self.stat_damageTaken.unwrap() / 10,
-               dealt=self.stat_damageDealt.unwrap() / 10,
-               mobkills=self.stat_mobKills.unwrap(),
-               playerkills=self.stat_playerKills.unwrap(),
-               distance=self.distanceMeter.unwrap(),
-               cakeslices=self.stat_cakeSlicesEaten.unwrap(),
-               advancements=self.advancements_count.unwrap())
-    }
-}
-
-
-/// Read a single stats file
-fn read_stats(path: &PathBuf) -> io::Result<StatsFile> {
-    let uuid = match path.file_stem() {
-        Some(x) => x.to_str().expect("Invalid player uuid").to_string(),
-        None => return io_error!("File name did not contain a uuid"),
-    };
-
-    let mut f = File::open(path)?;
-    let mut tmp = String::new();
-    f.read_to_string(&mut tmp)?;
-    /* Use underscores instead of . so that we can take advantage of
-     * RustcDecodable, since Rust doesn't allow the use of . */
-    tmp = tmp.replace(".", "_");
-    let mut ret: StatsFile = serde_json::from_str(&tmp)?;
-    ret.none_to_default();
-
-    ret.distanceMeter = Some((ret.stat_walkOneCm.unwrap()
-        + ret.stat_crouchOneCm.unwrap()
-        + ret.stat_sprintOneCm.unwrap()
-        + ret.stat_swimOneCm.unwrap()
-        + ret.stat_fallOneCm.unwrap()
-        + ret.stat_climbOneCm.unwrap()
-        + ret.stat_flyOneCm.unwrap()
-        + ret.stat_diveOneCm.unwrap()
-        + ret.stat_minecartOneCm.unwrap()
-        + ret.stat_boatOneCm.unwrap()
-        + ret.stat_pigOneCm.unwrap()
-        + ret.stat_horseOneCm.unwrap()
-        + ret.stat_aviateOneCm.unwrap()) / (100 * 1000));
-
-    let advancements_path = {
-        let mut path = path.clone();
-        assert!(path.pop()); /* assert so that we unwind if path is empty */
-        assert!(path.pop()); /* and we pop twice to remove both uuid.json and stats */
-        path.push("advancements");
-        path.push(format!("{}.json", uuid));
-        path
-    };
-    ret.advancements_count = Some(count_advancements(&advancements_path).unwrap());
-
-    /* It seems a few players don't have a uuid playerfile, these players are
-     * unimportant so we just ignore them */
-    if let Ok(name) = get_player_name(&uuid) {
-        ret.playername = Some(name);
-    } else {
-        ret.playername = Some(uuid.clone());
-    }
-
-    Ok(ret)
-}
-
-/// Read the given advancements file, returning the amount of gained achievements
+/// Read the given advancements file, returning the number of gained achievements
 fn count_advancements(path: &PathBuf) -> io::Result<u64> {
-
     let mut f = match File::open(path) {
         Ok(f) => f,
         /* If file is not found, the player has 0 advancements.
@@ -255,7 +129,6 @@ fn count_advancements(path: &PathBuf) -> io::Result<u64> {
                     count += 1;
                 }
             },
-            Some(_) => (),
             _ => (),
         }
     }
@@ -263,25 +136,173 @@ fn count_advancements(path: &PathBuf) -> io::Result<u64> {
     Ok(count)
 }
 
-
-/// Given a UUID find the player name of the UUID from the playerdata dir
-fn get_player_name(uuid: &str) -> io::Result<String> {
-    let mut f = File::open(format!("./playerdata/{}.dat", uuid))?;
-    let nbt = nbt::Blob::from_gzip(&mut f)?;
-
-    let nbt = match nbt["bukkit"] {
-        nbt::Value::Compound(ref x) => x.clone(),
-        _ => return io_error!("Could not find bukkit compound in NBT"),
-    };
-    let name = match nbt.get("lastKnownName") {
-        Some(x) => x.clone(),
-        None => return io_error!("lastKnownName not found in NBT"),
-    };
-    let name = match name {
-        nbt::Value::String(ref x) => x.clone(),
-        _ => return io_error!("lastKnownName had invalid type in NBT"),
-    };
-
-    Ok(name)
+#[derive(Deserialize, Debug, PartialEq, Eq)]
+struct Player {
+    #[serde(skip)]
+    playername: String,
+    #[serde(skip)]
+    advancements_count: u64,
+    #[serde(skip)]
+    uuid: String,
+    stats: Stats,
 }
 
+#[derive(Deserialize, Debug, PartialEq, Eq)]
+struct Stats {
+    /* May add other fields here, such as minecraft:dropped */
+    #[serde(rename = "minecraft:custom")]
+    custom: Custom,
+}
+
+#[derive(Deserialize, Debug, PartialEq, Eq)]
+struct Custom {
+    #[serde(rename = "minecraft:play_one_minute")]
+    play_time: u64,
+    #[serde(rename = "minecraft:jump", default)]
+    jumps: u64,
+    #[serde(rename = "minecraft:deaths", default)]
+    deaths: u64,
+    #[serde(rename = "minecraft:damage_taken", default)]
+    damage_taken: u64,
+    #[serde(rename = "minecraft:damage_dealt", default)]
+    damage_dealt: u64,
+    #[serde(rename = "minecraft:mob_kills", default)]
+    mob_kills: u64,
+    #[serde(rename = "minecraft:player_kills", default)]
+    player_kills: u64,
+    #[serde(rename = "minecraft:eat_cake_slice", default)]
+    cake_slices: u64,
+    #[serde(rename = "minecraft:leave_game")]
+    leave_game: u64,
+    #[serde(rename = "minecraft:walk_one_cm", default)]
+    walk: u64,
+    #[serde(rename = "minecraft:crouch_one_cm", default)]
+    crouch: u64,
+    #[serde(rename = "minecraft:sprint_one_cm", default)]
+    sprint: u64,
+    #[serde(rename = "minecraft:swim_one_cm", default)]
+    swim: u64,
+    #[serde(rename = "minecraft:fall_one_cm", default)]
+    fall: u64,
+    #[serde(rename = "minecraft:climb_one_cm", default)]
+    climb: u64,
+    #[serde(rename = "minecraft:fly_one_cm", default)]
+    fly: u64,
+    #[serde(rename = "minecraft:walk_on_water_one_cm", default)]
+    walk_on_water: u64,
+    #[serde(rename = "minecraft:minecart_one_cm", default)]
+    minecart: u64,
+    #[serde(rename = "minecraft:boat_one_cm", default)]
+    boat: u64,
+    #[serde(rename = "minecraft:pig_one_cm", default)]
+    pig: u64,
+    #[serde(rename = "minecraft:horse_one_cm", default)]
+    horse: u64,
+    #[serde(rename = "minecraft:aviate_one_cm", default)]
+    aviate: u64,
+}
+
+impl Player {
+    /// Create a Player struct using the path to the player's stats file as input
+    fn new(path: &PathBuf) -> io::Result<Self> {
+        let uuid = match path.file_stem() {
+            Some(x) => x.to_str().expect("Invalid player uuid").to_string(),
+            None => return io_error!("File name did not contain a uuid"),
+        };
+
+        let mut f = File::open(path)?;
+        let mut tmp = String::new();
+        f.read_to_string(&mut tmp)?;
+        let mut ret: Player = serde_json::from_str(&tmp)?;
+
+        let advancements_path = {
+            let mut path = path.clone();
+            assert!(path.pop()); /* assert so that we unwind if path is empty */
+            assert!(path.pop()); /* and we pop twice to remove both uuid.json and stats */
+            path.push("advancements");
+            path.push(format!("{}.json", uuid));
+            path
+        };
+        ret.advancements_count = count_advancements(&advancements_path)?;
+        ret.uuid = uuid;
+        ret.set_player_name()?;
+
+        Ok(ret)
+    }
+
+    /// Set the player's name
+    fn set_player_name(&mut self) -> io::Result<()> {
+        let mut f = File::open(format!("./playerdata/{}.dat", self.uuid))?;
+        let nbt = nbt::Blob::from_gzip(&mut f)?;
+
+        let nbt = match nbt["bukkit"] {
+            nbt::Value::Compound(ref x) => x.clone(),
+            _ => return io_error!("Could not find bukkit compound in NBT"),
+        };
+        let name = match nbt.get("lastKnownName") {
+            Some(x) => x.clone(),
+            None => return io_error!("lastKnownName not found in NBT"),
+        };
+        let name = match name {
+            nbt::Value::String(ref x) => x.clone(),
+            _ => return io_error!("lastKnownName had invalid type in NBT"),
+        };
+
+        self.playername = name;
+
+        Ok(())
+    }
+
+    /// Sum all the travel stats to get the total distance traveled (in km)
+    fn get_traveled_distance(&self) -> u64 {
+        let a = &self.stats.custom;
+        (a.walk
+            + a.crouch
+            + a.sprint
+            + a.swim
+            + a.fall
+            + a.climb
+            + a.fly
+            + a.walk_on_water
+            + a.minecart
+            + a.boat
+            + a.pig
+            + a.horse
+            + a.aviate) / (100 * 1000)
+    }
+}
+
+impl fmt::Display for Player {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f,
+               "| [[{playername}]] || {playtime} || {leavegame} || {jump} || {deaths} || {damagetaken} || {damagedealt} || {mobkills} || {playerkills} || {distance} || {cakeslices} || {advancements}/55",
+               playername=self.playername,
+               playtime=self.stats.custom.play_time / (20 * 60 * 60),
+               leavegame=self.stats.custom.leave_game,
+               jump=self.stats.custom.jumps,
+               deaths=self.stats.custom.deaths,
+               damagetaken=self.stats.custom.damage_taken,
+               damagedealt=self.stats.custom.damage_dealt,
+               mobkills=self.stats.custom.mob_kills,
+               playerkills=self.stats.custom.player_kills,
+               distance=self.get_traveled_distance(),
+               cakeslices=self.stats.custom.cake_slices,
+               advancements=self.advancements_count)
+    }
+}
+
+impl Ord for Player {
+    fn cmp(&self, other: &Player) -> Ordering {
+        match other.stats.custom.play_time.cmp(&self.stats.custom.play_time) {
+            Ordering::Equal => {
+                self.uuid.cmp(&other.uuid)
+            }
+            x => x,
+        }
+    }
+}
+impl PartialOrd for Player {
+    fn partial_cmp(&self, other: &Player) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
