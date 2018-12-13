@@ -366,7 +366,9 @@ impl fmt::Display for Player {
 
 impl Ord for Player {
     fn cmp(&self, other: &Player) -> Ordering {
-        match other.stats.custom.play_time.cmp(&self.stats.custom.play_time) {
+        let a_playtime = self.stats.custom.play_time + self.oldstats.play_time;
+        let b_playtime = other.stats.custom.play_time + other.oldstats.play_time;
+        match b_playtime.cmp(&a_playtime) {
             Ordering::Equal => {
                 self.uuid.cmp(&other.uuid)
             }
