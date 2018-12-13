@@ -3,36 +3,39 @@ extern crate serde;
 extern crate serde_json;
 #[macro_use]
 extern crate serde_derive;
+#[macro_use]
+extern crate error_chain;
 
 use std::cmp::Ordering;
 use std::fmt;
 use std::fs::File;
 use std::fs;
 use std::io::prelude::*;
-use std::io;
 use std::path::PathBuf;
 
 use serde_json::Value;
 
-/** Create an InvalidData io::Error with the description being a
- * formatted string */
-macro_rules! io_error {
-    ($fmtstr:tt) => { io_error!($fmtstr,) };
-    ($fmtstr:tt, $( $args:expr ),* ) => {
-        Err(::std::io::Error::new(::std::io::ErrorKind::Other,
-                                  format!($fmtstr, $( $args ),* )));
-    };
-}
-
 const AMOUNT: usize = 300;
 
-fn main() -> io::Result<()> {
+mod errors {
+    error_chain!{
+        foreign_links {
+            Io(::std::io::Error);
+            SerdeJson(serde_json::Error);
+            HematiteNbt(nbt::Error);
+        }
+    }
+}
+use errors::*;
+
+fn main() -> Result<()> {
     let files = list_stats_files("./stats").unwrap();
 
     let mut stats = Vec::with_capacity(files.len());
 
     for file in files {
-        stats.push(Player::new(&file)?);
+        stats.push(Player::new(&file)
+                   .chain_err(|| format!("while handling player from file {}", file.to_string_lossy()))?);
     }
 
     stats.sort();
@@ -72,7 +75,7 @@ fn main() -> io::Result<()> {
 }
 
 /// Returns a list of paths to each of the json files in the stats directory
-fn list_stats_files(dir: &str) -> io::Result<Vec<PathBuf>> {
+fn list_stats_files(dir: &str) -> Result<Vec<PathBuf>> {
     Ok(fs::read_dir(dir)?
        .map(|x| x.unwrap().path().to_path_buf())
        .filter(|x| {
@@ -90,7 +93,7 @@ fn list_stats_files(dir: &str) -> io::Result<Vec<PathBuf>> {
 }
 
 /// Read the given advancements file, returning the number of gained achievements
-fn count_advancements(path: &PathBuf) -> io::Result<u64> {
+fn count_advancements(path: &PathBuf) -> Result<u64> {
     let mut f = match File::open(path) {
         Ok(f) => f,
         /* If file is not found, the player has 0 advancements.
@@ -256,10 +259,10 @@ struct OldStats {
 
 impl Player {
     /// Create a Player struct using the path to the player's stats file as input
-    fn new(path: &PathBuf) -> io::Result<Self> {
+    fn new(path: &PathBuf) -> Result<Self> {
         let uuid = match path.file_stem() {
             Some(x) => x.to_str().expect("Invalid player uuid").to_string(),
-            None => return io_error!("File name did not contain a uuid"),
+            None => bail!("File name did not contain a uuid"),
         };
 
         let mut f = File::open(path)?;
@@ -283,21 +286,23 @@ impl Player {
     }
 
     /// Set the player's name
-    fn set_player_name(&mut self) -> io::Result<()> {
-        let mut f = File::open(format!("./playerdata/{}.dat", self.uuid))?;
-        let nbt = nbt::Blob::from_gzip(&mut f)?;
+    fn set_player_name(&mut self) -> Result<()> {
+        let mut f = File::open(format!("./playerdata/{}.dat", self.uuid))
+            .chain_err(|| format!("while trying to open playerdata file for player with uuid {}", self.uuid))?;
+        let nbt = nbt::Blob::from_gzip(&mut f)
+            .chain_err(|| format!("while trying to parse playerdata file for player with uuid {}", self.uuid))?;
 
         let nbt = match nbt["bukkit"] {
             nbt::Value::Compound(ref x) => x.clone(),
-            _ => return io_error!("Could not find bukkit compound in NBT"),
+            _ => bail!("Could not find bukkit compound in NBT"),
         };
         let name = match nbt.get("lastKnownName") {
             Some(x) => x.clone(),
-            None => return io_error!("lastKnownName not found in NBT"),
+            None => bail!("lastKnownName not found in NBT"),
         };
         let name = match name {
             nbt::Value::String(ref x) => x.clone(),
-            _ => return io_error!("lastKnownName had invalid type in NBT"),
+            _ => bail!("lastKnownName had invalid type in NBT"),
         };
 
         self.playername = name;
