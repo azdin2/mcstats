@@ -144,17 +144,20 @@ struct Player {
     advancements_count: u64,
     #[serde(skip)]
     uuid: String,
+    #[serde(default)]
     stats: Stats,
+    #[serde(flatten)]
+    oldstats: OldStats,
 }
 
-#[derive(Deserialize, Debug, PartialEq, Eq)]
+#[derive(Deserialize, Default, Debug, PartialEq, Eq)]
 struct Stats {
     /* May add other fields here, such as minecraft:dropped */
     #[serde(rename = "minecraft:custom")]
     custom: Custom,
 }
 
-#[derive(Deserialize, Debug, PartialEq, Eq)]
+#[derive(Deserialize, Default, Debug, PartialEq, Eq)]
 struct Custom {
     #[serde(rename = "minecraft:play_one_minute")]
     play_time: u64,
@@ -199,6 +202,55 @@ struct Custom {
     #[serde(rename = "minecraft:horse_one_cm", default)]
     horse: u64,
     #[serde(rename = "minecraft:aviate_one_cm", default)]
+    aviate: u64,
+}
+
+/// Represents stats files in the old pre 1.13 format
+#[derive(Deserialize, Default, Debug, PartialEq, Eq)]
+struct OldStats {
+    #[serde(rename = "stat.playOneMinute", default)]
+    play_time: u64,
+    #[serde(rename = "stat.jump", default)]
+    jumps: u64,
+    #[serde(rename = "stat.deaths", default)]
+    deaths: u64,
+    #[serde(rename = "stat.damageTaken", default)]
+    damage_taken: u64,
+    #[serde(rename = "stat.damageDealt", default)]
+    damage_dealt: u64,
+    #[serde(rename = "stat.mobKills", default)]
+    mob_kills: u64,
+    #[serde(rename = "stat.playerKills", default)]
+    player_kills: u64,
+    #[serde(rename = "stat.cakeSlicesEaten", default)]
+    cake_slices: u64,
+    #[serde(rename = "stat.leaveGame", default)]
+    leave_game: u64,
+    #[serde(rename = "stat.walkOneCm", default)]
+    walk: u64,
+    #[serde(rename = "stat.crouchOneCm", default)]
+    crouch: u64,
+    #[serde(rename = "stat.sprintOneCm", default)]
+    sprint: u64,
+    #[serde(rename = "stat.swimOneCm", default)]
+    swim: u64,
+    #[serde(rename = "stat.fallOneCm", default)]
+    fall: u64,
+    #[serde(rename = "stat.climbOneCm", default)]
+    climb: u64,
+    #[serde(rename = "stat.flyOneCm", default)]
+    fly: u64,
+    #[serde(rename = "stat.diveOneCm", default)]
+    dive: u64,
+    #[serde(rename = "stat.minecartOneCm", default)]
+    minecart: u64,
+    #[serde(rename = "stat.boatOneCm", default)]
+    boat: u64,
+    #[serde(rename = "stat.pigOneCm", default)]
+    pig: u64,
+    #[serde(rename = "stat.horseOneCm", default)]
+    horse: u64,
+    #[serde(rename = "stat.aviateOneCm", default)]
     aviate: u64,
 }
 
@@ -256,6 +308,7 @@ impl Player {
     /// Sum all the travel stats to get the total distance traveled (in km)
     fn get_traveled_distance(&self) -> u64 {
         let a = &self.stats.custom;
+        let b = &self.oldstats;
         (a.walk
             + a.crouch
             + a.sprint
@@ -268,25 +321,40 @@ impl Player {
             + a.boat
             + a.pig
             + a.horse
-            + a.aviate) / (100 * 1000)
+            + a.aviate
+            + b.walk
+            + b.crouch
+            + b.sprint
+            + b.swim
+            + b.fall
+            + b.climb
+            + b.fly
+            + b.dive
+            + b.minecart
+            + b.boat
+            + b.pig
+            + b.horse
+            + b.aviate
+            ) / (100 * 1000)
     }
 }
 
 impl fmt::Display for Player {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        println!("{:?}", self);
         write!(f,
                "| [[{playername}]] || {playtime} || {leavegame} || {jump} || {deaths} || {damagetaken} || {damagedealt} || {mobkills} || {playerkills} || {distance} || {cakeslices} || {advancements}/55",
                playername=self.playername,
-               playtime=self.stats.custom.play_time / (20 * 60 * 60),
-               leavegame=self.stats.custom.leave_game,
-               jump=self.stats.custom.jumps,
-               deaths=self.stats.custom.deaths,
-               damagetaken=self.stats.custom.damage_taken,
-               damagedealt=self.stats.custom.damage_dealt,
-               mobkills=self.stats.custom.mob_kills,
-               playerkills=self.stats.custom.player_kills,
+               playtime=(self.stats.custom.play_time + self.oldstats.play_time) / (20 * 60 * 60),
+               leavegame=self.stats.custom.leave_game + self.oldstats.leave_game,
+               jump=self.stats.custom.jumps + self.oldstats.jumps,
+               deaths=self.stats.custom.deaths + self.oldstats.deaths,
+               damagetaken=self.stats.custom.damage_taken + self.oldstats.damage_taken,
+               damagedealt=self.stats.custom.damage_dealt + self.oldstats.damage_dealt,
+               mobkills=self.stats.custom.mob_kills + self.oldstats.mob_kills,
+               playerkills=self.stats.custom.player_kills + self.oldstats.player_kills,
                distance=self.get_traveled_distance(),
-               cakeslices=self.stats.custom.cake_slices,
+               cakeslices=self.stats.custom.cake_slices + self.oldstats.cake_slices,
                advancements=self.advancements_count)
     }
 }
