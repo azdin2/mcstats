@@ -64,7 +64,7 @@ fn main() -> Result<()> {
 
     println!(r#"{{| class="wikitable sortable" style="margin-left:0""#);
     println!("|-");
-    println!(r#"! Player !! Play time (hours) !! Games quit !! Jumps !! Deaths !! Damage taken (half hearts) !! Damage dealt (half hearts) !! Mob kills !! Player kills !! Traveled (km) !! Cake slices eaten !!data-sort-type="number" | Advancements"#);
+    println!(r#"! Player !! Play time (hours) !! Games quit !! Jumps !! Deaths !! Damage taken (half hearts) !! Damage dealt (half hearts) !! Mob kills !! Player kills !! Traveled (km) !! Cake slices eaten !!data-sort-type="number" | Advancements !! Stone Mined !! Obsidian Mined"#);
     for stat in stats {
         println!("|-");
         println!("{}", &stat);
@@ -158,6 +158,8 @@ struct Stats {
     /* May add other fields here, such as minecraft:dropped */
     #[serde(rename = "minecraft:custom")]
     custom: Custom,
+    #[serde(rename = "minecraft:mined", default)]
+    mined: Mined,
 }
 
 #[derive(Deserialize, Default, Debug, PartialEq, Eq)]
@@ -206,6 +208,14 @@ struct Custom {
     horse: u64,
     #[serde(rename = "minecraft:aviate_one_cm", default)]
     aviate: u64,
+}
+
+#[derive(Deserialize, Default, Debug, PartialEq, Eq)]
+struct Mined {
+    #[serde(rename = "minecraft:stone", default)]
+    stone: u64,
+    #[serde(rename = "minecraft:obsidian", default)]
+    obsidian: u64,
 }
 
 /// Represents stats files in the old pre 1.13 format
@@ -347,7 +357,7 @@ impl Player {
 impl fmt::Display for Player {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f,
-               "| [[{playername}]] || {playtime} || {leavegame} || {jump} || {deaths} || {damagetaken} || {damagedealt} || {mobkills} || {playerkills} || {distance} || {cakeslices} || {advancements}/59",
+               "| [[{playername}]] || {playtime} || {leavegame} || {jump} || {deaths} || {damagetaken} || {damagedealt} || {mobkills} || {playerkills} || {distance} || {cakeslices} || {advancements}/59 || {stonemined} || {obsidianmined}",
                playername=self.playername,
                playtime=(self.stats.custom.play_time + self.oldstats.play_time) / (20 * 60 * 60),
                leavegame=self.stats.custom.leave_game + self.oldstats.leave_game,
@@ -359,7 +369,9 @@ impl fmt::Display for Player {
                playerkills=self.stats.custom.player_kills + self.oldstats.player_kills,
                distance=self.get_traveled_distance(),
                cakeslices=self.stats.custom.cake_slices + self.oldstats.cake_slices,
-               advancements=self.advancements_count)
+               advancements=self.advancements_count,
+               stonemined=self.stats.mined.stone,
+               obsidianmined=self.stats.mined.obsidian)
     }
 }
 
