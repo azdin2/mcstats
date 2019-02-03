@@ -180,7 +180,7 @@ struct Custom {
     player_kills: u64,
     #[serde(rename = "minecraft:eat_cake_slice", default)]
     cake_slices: u64,
-    #[serde(rename = "minecraft:leave_game")]
+    #[serde(rename = "minecraft:leave_game", default)]
     leave_game: u64,
     #[serde(rename = "minecraft:walk_one_cm", default)]
     walk: u64,
