@@ -4,7 +4,7 @@ extern crate serde_json;
 #[macro_use]
 extern crate serde_derive;
 #[macro_use]
-extern crate error_chain;
+extern crate failure;
 
 use std::cmp::Ordering;
 use std::fmt;
@@ -15,18 +15,11 @@ use std::path::PathBuf;
 
 use serde_json::Value;
 
+use failure::ResultExt;
+
 const AMOUNT: usize = 300;
 
-mod errors {
-    error_chain!{
-        foreign_links {
-            Io(::std::io::Error);
-            SerdeJson(serde_json::Error);
-            HematiteNbt(nbt::Error);
-        }
-    }
-}
-use errors::*;
+type Result<T> = std::result::Result<T, failure::Error>;
 
 fn main() -> Result<()> {
     let files = list_stats_files("./stats").unwrap();
@@ -35,7 +28,7 @@ fn main() -> Result<()> {
 
     for file in files {
         stats.push(Player::new(&file)
-                   .chain_err(|| format!("while handling player from file {}", file.to_string_lossy()))?);
+                   .with_context(|_| format!("while handling player from file {}", file.to_string_lossy()))?);
     }
 
     stats.sort();
@@ -298,9 +291,9 @@ impl Player {
     /// Set the player's name
     fn set_player_name(&mut self) -> Result<()> {
         let mut f = File::open(format!("./playerdata/{}.dat", self.uuid))
-            .chain_err(|| format!("while trying to open playerdata file for player with uuid {}", self.uuid))?;
+            .with_context(|_| format!("while trying to open playerdata file for player with uuid {}", self.uuid))?;
         let nbt = nbt::Blob::from_gzip(&mut f)
-            .chain_err(|| format!("while trying to parse playerdata file for player with uuid {}", self.uuid))?;
+            .with_context(|_| format!("while trying to parse playerdata file for player with uuid {}", self.uuid))?;
 
         let nbt = match nbt["bukkit"] {
             nbt::Value::Compound(ref x) => x.clone(),
