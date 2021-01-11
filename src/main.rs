@@ -57,7 +57,7 @@ fn main() -> Result<()> {
 
     println!(r#"{{| class="wikitable sortable" style="margin-left:0""#);
     println!("|-");
-    println!(r#"! Player !! Play time (hours) !! Games quit !! Jumps !! Deaths !! Damage taken (half hearts) !! Damage dealt (half hearts) !! Mob kills !! Player kills !! Traveled (km) !! Cake slices eaten !!data-sort-type="number" | Advancements !! Stone Mined !! Obsidian Mined !! Cobblestone mined !! Netherrack mined !! Spawners mined"#);
+    println!(r#"! Player !! Play time (hours) !! Games quit !! Jumps !! Deaths !! Damage taken (half hearts) !! Damage dealt (half hearts) !! Mob kills !! Player kills !! Traveled (km) !! Cake slices eaten !!data-sort-type="number" | Advancements !! Stone Mined !! Obsidian Mined !! Cobblestone mined !! Netherrack mined !! Spawners mined !! Ender Dragons Killed || Withers Killed || Guardians Killed || || Vindicators Killed || Skeleton Horses Killed"#);
     for stat in stats {
         println!("|-");
         println!("{}", &stat);
@@ -153,6 +153,8 @@ struct Stats {
     custom: Custom,
     #[serde(rename = "minecraft:mined", default)]
     mined: Mined,
+    #[serde(rename = "minecraft:killed", default)]
+    killed: Killed,
 }
 
 #[derive(Deserialize, Default, Debug, PartialEq, Eq)]
@@ -356,7 +358,7 @@ impl Player {
 impl fmt::Display for Player {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f,
-               "| [[{playername}]] || {playtime} || {leavegame} || {jump} || {deaths} || {damagetaken} || {damagedealt} || {mobkills} || {playerkills} || {distance} || {cakeslices} || {advancements}/67 || {stonemined} || {obsidianmined} || {cobblestonemined} || {netherrackmined} || {spawnermined}",
+               "| [[{playername}]] || {playtime} || {leavegame} || {jump} || {deaths} || {damagetaken} || {damagedealt} || {mobkills} || {playerkills} || {distance} || {cakeslices} || {advancements}/80 || {stonemined} || {obsidianmined} || {cobblestonemined} || {netherrackmined} || {spawnermined} || {enderdragon} || {wither} || {guardian} || || {vindicator} || {skeleton_horse}",
                playername=self.playername,
                playtime=(self.stats.custom.play_time + self.oldstats.play_time) / (20 * 60 * 60),
                leavegame=self.stats.custom.leave_game + self.oldstats.leave_game,
@@ -373,7 +375,12 @@ impl fmt::Display for Player {
                obsidianmined=self.stats.mined.obsidian,
                cobblestonemined=self.stats.mined.cobblestone,
                netherrackmined=self.stats.mined.netherrack,
-               spawnermined=self.stats.mined.spawner)
+               spawnermined=self.stats.mined.spawner,
+               enderdragon=self.stats.killed.enderdragon,
+               wither=self.stats.killed.wither,
+               guardian=self.stats.killed.guardian,
+               vindicator=self.stats.killed.vindicator,
+               skeleton_horse=self.stats.killed.skeleton_horse)
     }
 }
 
