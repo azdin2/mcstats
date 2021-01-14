@@ -57,7 +57,7 @@ fn main() -> Result<()> {
 
     println!(r#"{{| class="wikitable sortable" style="margin-left:0""#);
     println!("|-");
-    println!(r#"! Player !! Play time (hours) !! Games quit !! Jumps !! Deaths !! Damage taken (half hearts) !! Damage dealt (half hearts) !! Mob kills !! Player kills !! Traveled (km) !! Cake slices eaten !!data-sort-type="number" | Advancements !! Stone Mined !! Obsidian Mined !! Cobblestone mined !! Netherrack mined !! Spawners mined"#);
+    println!(r#"! Player !! Play time (hours) !! Games quit !! Jumps !! Deaths !! Damage taken (half hearts) !! Damage dealt (half hearts) !! Mob kills !! Player kills !! Traveled (km) !! Cake slices eaten !!data-sort-type="number" | Advancements !! Villagers Traded With !! Stone Mined !! Obsidian Mined !! Cobblestone mined !! Netherrack mined !! Spawners mined !! Ender Dragons Killed !! Withers Killed !! Elder Guardians Killed !! Evokers Killed !! Skeleton Horses Killed"#);
     for stat in stats {
         println!("|-");
         println!("{}", &stat);
@@ -151,6 +151,8 @@ struct Stats {
     /* May add other fields here, such as minecraft:dropped */
     #[serde(rename = "minecraft:custom")]
     custom: Custom,
+    #[serde(rename = "minecraft:killed", default)]
+    killed: Killed,
     #[serde(rename = "minecraft:mined", default)]
     mined: Mined,
 }
@@ -201,6 +203,8 @@ struct Custom {
     horse: u64,
     #[serde(rename = "minecraft:aviate_one_cm", default)]
     aviate: u64,
+    #[serde(rename = "minecraft:traded_with_villager", default)]
+    traded_with_villager: u64,
 }
 
 #[derive(Deserialize, Default, Debug, PartialEq, Eq)]
@@ -215,6 +219,20 @@ struct Mined {
     netherrack: u64,
     #[serde(rename = "minecraft:spawner", default)]
     spawner: u64,
+}
+
+#[derive(Deserialize, Default, Debug, PartialEq, Eq)]
+struct Killed {
+    #[serde(rename = "minecraft:enderdragon", default)]
+    enderdragon: u64,
+    #[serde(rename = "minecraft:wither", default)]
+    wither: u64,
+    #[serde(rename = "minecraft:elder_guardian", default)]
+    elder_guardian: u64,
+    #[serde(rename = "minecraft:evoker", default)]
+    evoker: u64,
+    #[serde(rename = "minecraft:skeleton_horse", default)]
+    skeleton_horse: u64,
 }
 
 /// Represents stats files in the old pre 1.13 format
@@ -356,7 +374,7 @@ impl Player {
 impl fmt::Display for Player {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f,
-               "| [[{playername}]] || {playtime} || {leavegame} || {jump} || {deaths} || {damagetaken} || {damagedealt} || {mobkills} || {playerkills} || {distance} || {cakeslices} || {advancements}/67 || {stonemined} || {obsidianmined} || {cobblestonemined} || {netherrackmined} || {spawnermined}",
+               "| [[{playername}]] || {playtime} || {leavegame} || {jump} || {deaths} || {damagetaken} || {damagedealt} || {mobkills} || {playerkills} || {distance} || {cakeslices} || {advancements}/81 || {traded_with_villager} || {stonemined} || {obsidianmined} || {cobblestonemined} || {netherrackmined} || {spawnermined} || {enderdragon} || {wither} || {elder_guardian} || {evoker} || {skeleton_horse}",
                playername=self.playername,
                playtime=(self.stats.custom.play_time + self.oldstats.play_time) / (20 * 60 * 60),
                leavegame=self.stats.custom.leave_game + self.oldstats.leave_game,
@@ -369,11 +387,17 @@ impl fmt::Display for Player {
                distance=self.get_traveled_distance(),
                cakeslices=self.stats.custom.cake_slices + self.oldstats.cake_slices,
                advancements=self.advancements_count,
+               traded_with_villager=self.stats.custom.traded_with_villager,
                stonemined=self.stats.mined.stone,
                obsidianmined=self.stats.mined.obsidian,
                cobblestonemined=self.stats.mined.cobblestone,
                netherrackmined=self.stats.mined.netherrack,
-               spawnermined=self.stats.mined.spawner)
+               spawnermined=self.stats.mined.spawner,
+               enderdragon=self.stats.killed.enderdragon,
+               wither=self.stats.killed.wither,
+               elder_guardian=self.stats.killed.elder_guardian,
+               evoker=self.stats.killed.evoker,
+               skeleton_horse=self.stats.killed.skeleton_horse)
     }
 }
 
